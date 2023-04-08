@@ -10,7 +10,7 @@ import os
 import logging
 
 # Получение токена из переменных окружения
-bot_token = os.getenv('API_TOKEN')
+bot_token = os.getenv('ShGCurrencyConverterBot')
 
 # Создание бота с токеном, который выдал в BotFather при регистрации бота
 bot = Bot(token=bot_token)
