@@ -55,8 +55,8 @@ def drop_function():
 
 	def main():
     create_function()
-    insert_function(1, 'Наталья', 'Nata@mail.ru')
-    insert_function(2, 'Анастасия', 'Nastya@mail.ru')
+    insert_function(1, 'Наталья', 'Nata2002@mail.ru')
+    insert_function(2, 'Анастасия', 'Nastya2002@mail.ru')
     insert_function(3, 'Наталья', 'Nata@mail.ru')
     insert_function(4, 'Анастасия', 'Nastya@mail.ru')
     select_function()
