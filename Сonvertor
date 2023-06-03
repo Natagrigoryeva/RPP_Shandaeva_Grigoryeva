@@ -1,0 +1,45 @@
+# Реализация микросервиса convertor
+from typing import List
+import pandas as pd
+import uvicorn
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from starlette.responses import JSONResponse
+import psycopg2
+import re
+
+app = FastAPI()
+conn = psycopg2.connect(
+    database="Lab_7",
+    user="postgres",
+    password="postgres",
+    host="localhost",
+    port="5432"
+)
+
+
+# 1 usage
+def convert_rate(source: str, target: str, user_sum: int):
+    cur = conn.cursor()
+    cur.execute("""
+                    select %(sum)s * crv. rate
+                    from currency_rates cr
+                    join currency_rates_values crv on cr.id = crv.currency_rate_id
+                    where
+                        cr.base_currency = %(source)s
+                        AND crv.currency_code = %(target)s
+                 """, {"sum": sum, "target": target, "source": source})
+    return cur.fetchone()
+
+
+# НТТР. ЭНДПОИНТ GET…/convert
+@app.get("/convert")
+async def convert_get(base_currency: str, converted_currency: str, user_sum: int):
+    try:
+        return {"converted": convert_rate(source=base_currency, target=converted_currency, user_sum=user_sum)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Не удалось сконвертировать валюты")
+
+
+if __name__ == '__main__':
+    uvicorn.run(app, port=10610, host='localhost')
