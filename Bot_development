@@ -1,0 +1,203 @@
+# Разработка бота
+# Команда manage_currency
+from aiogram import Bot, Dispatcher, types  # Для того чтобы писать аннотации типов. в функциях
+from aiogram.utils import executor  # Запустить бота онлайн
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.dispatcher import FSMContext
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.types import Message
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.types.bot_command_scope import BotCommandScopeChat, BotCommandScopeDefault
+import psycopg2  # подключение библиотеки постпрес
+from aiogram.dispatcher.filters import Text
+import os  # Чтобы прочитать токен
+import logging
+import pandas as pd
+import requests
+import json
+import re
+
+# подключение. к базе данных
+conn = psycopg2.connect(
+    database="Lab_7",
+    user="postgres",
+    password="postgres",
+    host="localhost",
+    port="5432"
+)
+# Получение токена из переменных окружения
+bot_token = os.getenv('TELEGRAM_BOT_TOKEN_LAB')
+# Создание бота с токеном
+bot = Bot(token=bot_token)
+# Инициализация диспетчера команд
+dp = Dispatcher(bot, storage=MemoryStorage())  # Храниние состояния памяти (после перезуска все теряется).
+
+
+# получение чат айди
+@dp.message_handler(commands=['a'])
+async def chat_id(message: Message):
+    print(message.chat.id)
+
+
+class States(StatesGroup):
+    Manage_start = State()
+    Manage_continue = State()
+    Manage_rate = State()
+    Manage_add = State()
+
+    Start_convertion = State()
+    Next_convertion = State()
+    Continue_convertion = State()
+
+
+param = {}
+
+
+# Получение id администратора
+# 1 usage
+def select_fun():
+    cur = conn.cursor()
+    cur.execute("""select * from admins
+                where id = 1""")
+    df = pd.DataFrame(cur.fetchall())
+    ADMIN_ID = df.iloc[0][1]
+    conn.commit()
+    return (ADMIN_ID)
+
+
+ADMIN_ID = select_fun()
+
+# Команды для пользователей
+user_commands = [
+    types.BotCommand(command="/start", description="Старт"),
+    types.BotCommand(command="/convert", description="Конвертация"),
+]
+# Команды для админов
+admin_commands = [
+    types.BotCommand(command="/start", description="Старт"),
+    types.BotCommand(command=" /manage_currency", description="Управление"),
+    types.BotCommand(command=" /convert", description="Конвертация"),
+]
+
+
+# Функция для распределния команд между пользователями
+# 1 usage
+async def setup_bot_commands(arg):
+    await bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
+    await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+
+
+# Команда start
+@dp.message_handler(conmands=["start"])
+async def start_func(message: Message):
+    await message.answer("Привет, я - БОТ")
+
+
+# Команда manage currency
+@dp.message_handler(commands=["manage_currency"])
+async def manage(message: Message):
+    if str(message.chat.id) != ADMIN_ID:
+        await message.answer("Нет доступа к команде")
+    else:
+        await message.answer("Введите название конвертируемой (основной) валюты ")
+        await States.Manage_start.set()
+
+
+@dp.message_handler(state=States.Manage_start)
+async def add_currency(message: types.Message, state: FSMContext):
+    await state.update_data(baseCurrency=message.text)
+    await message.answer("Введите название валюты, в которую можно конвертировать указанную ранее валюту")
+    await States.Manage_continue.set()
+
+
+@dp.message_handler(state=States.Manage_continue)
+async def add_currency2(message: types.Message, state: FSMContext):
+    await state.update_data(code=message.text)
+    await message.answer("Введите курс")
+    await States.Manage_rate.set()
+
+
+@dp.message_handler(state=States.Manage_rate)
+async def add_currency3(message: types.Message, state: FSMContext):
+    d = await state.get_data()
+    codee = d['code']
+    try:
+        ratess = d['rates']
+    except Exception:
+        ratess = []
+    ratess.append({'code': codee, 'rate': float(message.text)})
+    await state.update_data(rates=ratess)
+    await message.answer("Добавить еще валюту, в которую может быть сконвертирована валюта. Введите (Да/Нет)")
+    await States.Manage_add.set()
+
+
+@dp.message_handler(state=States.Manage_add)
+async def addition(message: types.Message, state: FSMContext):
+    cur = await state.get_data()
+    answer = message.text
+    otvet = "Да"
+    if otvet in answer:
+        await message.answer("Введите название валюты, в которую будет производиться конвертация")
+        await States.Manage_continue.set()
+    else:
+        param["baseCurrency"] = str(cur["baseCurrency"])
+        param["rates"] = cur["rates"]
+        print(param)
+        requests.post("http://Localhost:10680/Load", json=param)
+        await message.answer("Вы завершили настройку валюты")
+        param.clear()
+        await state.finish()
+
+
+# @Команда convert
+@dp.message_handler(conmands=['convert'])
+async def convert_command(message: types.Message):
+    await States.Start_convertion.set()
+    await message.answer("Введите название конвертируемой валюты")
+
+
+@dp.message_handler(state=States.Start_convertion)
+async def process(message: types.Message, state: FMContext):
+    await state.update_data(baseCurrency=message.text)
+    await States.Next_convertion.set()
+    await message.answer("Введите название валюты, в которую будет производиться конвертация")
+
+
+@dp.message_handler(state=States.Next_convertion)
+async def convert(message: types.Message, state: FSMContext):
+    await state.update_data(convertedCurrency=message.text)
+    await States.Continue_convertion.set()
+    await message.answer("Введите сумму")
+
+
+@dp.message_handler(state=States.Continue_convertion)
+async def convertion(message: types.Message, state: FSMContext):
+    sum = message.text
+    cur = await state.get_data()
+    param["baseCurrency"] = str(cur["baseCurrency"])
+    param["convertedCurrency"] = str(cur["convertedCurrency"])
+    param["sum"] = float(sum)
+    print(param)
+    result = requests.get("nttp://localhost:10610/convert", params=param)
+    print(result)
+    if result == "<Response [500]>":
+        await message.answer("Произошла ошибка при конвертации валюты")
+        param.clear()
+        await state.finish()
+    else:
+        print(result)
+        res = result.text
+        res = float(re.sub(r"[^0-9.]", r"", res))
+        await message.answer(f'Результат конвертации ({res})')
+        param.clear()
+        await state.finish()
+
+
+# Точка входа в приложение
+if __name__ == '__main__':
+    # Активация системы логирования
+    logging.basicConfig(Level=logging.INFO)
+    # Подключение состемы логирования к боту
+    dp.middleware.setup(LoggingMiddleware())
+    # Запуск обработчиков команд
+    executor.start_polling(dp, skip_updates=True, on_startup=setup_bot_commands)
