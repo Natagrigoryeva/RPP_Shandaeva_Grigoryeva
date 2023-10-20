@@ -1,0 +1,594 @@
+# Создать файл main.py
+
+from flask import Flask
+from region_route import region_route
+from car_route import car_route
+from area_route import area_route
+from db_test import db
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 
+'postgresql://postgres:postgres@localhost/LAB_3_RPP'
+app.register_blueprint(region_route)
+app.register_blueprint(car_route)
+app.register_blueprint(area_route)
+app.config['SQLAlchemy_TRACK_MODIFIVATTION'] = False
+db.init_app(app)
+@app.route('/')
+def test_1():
+ return 'OK'
+# Обработчик запроса на файл favicon.ico
+@app.route('/favicon.ico')
+def favicon():
+ return ''
+if __name__ == '__main__':
+ app.run(debug=True)
+
+# Создать файл region_route.py, в котором должно быть создание Blueprint и запросы
+
+from flask import Blueprint, request, jsonify
+from db_test import db
+region_route = Blueprint('region', __name__, 
+url_prefix='/v1/region')
+class Region(db.Model):
+ id = db.Column(db.Integer, primary_key=True)
+ name = db.Column(db.String(255), nullable=False)
+
+# Запрос POST /v1/region/add
+
+@region_route.route('/add', methods=['POST'])
+def add_region():
+ data = request.get_json()
+ region_code = data['region_code']
+ name = data['name']
+ if Region.query.filter_by(id=region_code).first():
+ return jsonify({'error': 'Регион с этим кодом уже 
+существует'}), 400
+ region = Region(id=region_code, name=name)
+ db.session.add(region)
+ db.session.commit()
+ return jsonify({'error': 'Регион успешно добавлен'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/region/add'
+data = {
+ 'region_code': 28,
+ 'name': 'Москва'
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос POST /v1/region/update
+
+@region_route.route('/update', methods=['POST'])
+def update_region():
+ data = request.get_json()
+ region_code = data['region_code']
+ name = data['name']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Региона с таким кодом не 
+существует'}), 400
+ region.name = name
+ db.session.commit()
+ return jsonify({'message': 'Регион успешно обновлен'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/region/update'
+data = {
+ 'region_code': 54,
+ 'name': 'Томск'
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос POST /v1/region/delete
+
+@region_route.route('/delete', methods=['POST'])
+def delete_region():
+ data = request.get_json()
+ region_code = data.get('region_code')
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Региона с таким кодом не
+существует'}), 400
+ db.session.delete(region)
+ db.session.commit()
+ return jsonify({'message': 'Регион успешно удален'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/region/delete'
+data = {
+ 'region_code': 54
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/region/get
+
+@region_route.route('/get', methods=['GET'])
+def get_region():
+ data = request.get_json()
+ region_code = data['region_code']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Региона с таким кодом не 
+существует'}), 400
+ return jsonify({'region_code': region.id, 'name': 
+region.name}), 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/region/get'
+data = {
+ 'region_code': 54
+}
+response = requests.get(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/region/get/all
+
+@region_route.route('/get/all', methods=['GET'])
+def get_all_regions():
+ regions = Region.query.all()
+ regions_list = []
+ for region in regions:
+ regions_list.append({'region_code': region.id, 'name': 
+region.name})
+ return jsonify(regions_list), 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/region/get/all'
+response = requests.get(url)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Создать файл car_route.py, в котором должно быть создание Blueprint и запросы
+
+from flask import Blueprint, request, jsonify
+from region_route import Region
+from db_test import db
+car_route = Blueprint('car', __name__, url_prefix='/v1/car')
+class CarTaxParam(db.Model):
+ id = db.Column(db.Integer, primary_key=True)
+ city_id = db.Column(db.Integer, db.ForeignKey('region.id'), 
+nullable=False)
+ from_hp_car = db.Column(db.Integer, nullable=False)
+ to_hp_car = db.Column(db.Integer, nullable=False)
+ from_production_year_car = db.Column(db.Integer, 
+nullable=False)
+ to_production_year_car = db.Column(db.Integer, 
+nullable=False)
+ rate = db.Column(db.Numeric, nullable=False)
+
+# Запрос POST /v1/car/tax-param/add
+
+@car_route.route('/tax-param/add', methods=['POST'])
+def add_car_tax_param():
+ data = request.get_json()
+ code_rate = data['code_rate']
+ region_code = data['region_code']
+ from_hp_car = data['from_hp_car']
+ to_hp_car = data['to_hp_car']
+ from_production_year_car = data['from_production_year_car']
+ to_production_year_car = data['to_production_year_car']
+ rate = data['rate']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Регион не найден'}), 400
+ car_tax_param = CarTaxParam.query.filter_by(id=code_rate,
+ 
+city_id=region.id, 
+from_hp_car=from_hp_car, 
+to_hp_car=to_hp_car, 
+from_production_year_car=from_production_year_car, 
+to_production_year_car=to_production_year_car).first()
+ if car_tax_param:
+ return jsonify({'error': 'Параметр налога на автомобиль 
+уже существует'}), 400
+ new_car_tax_param = CarTaxParam(id=code_rate, 
+ city_id=region.id, 
+from_hp_car=from_hp_car, 
+to_hp_car=to_hp_car, 
+from_production_year_car=from_production_year_car, 
+to_production_year_car=to_production_year_car, 
+rate=rate)
+ db.session.add(new_car_tax_param)
+ db.session.commit()
+ return jsonify({'message': 'Параметр налога на автомобиль 
+успешно добавлен'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/car/tax-param/add'
+data = {
+ 'code_rate': 1,
+ 'region_code': 12,
+ 'from_hp_car': 400,
+ 'to_hp_car': 500,
+ 'from_production_year_car': 2000,
+ 'to_production_year_car': 2016,
+ 'rate': 0.6
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос POST /v1/car/tax-param/update
+
+@car_route.route('/tax-param/update', methods=['POST'])
+def update_car_tax_param():
+ data = request.get_json()
+ code_rate = data['code_rate']
+ region_code = data['region_code']
+ from_hp_car = data['from_hp_car']
+ to_hp_car = data['to_hp_car']
+ from_production_year_car = data['from_production_year_car']
+ to_production_year_car = data['to_production_year_car']
+ rate = data['rate']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Регион не найден'}), 400
+ car_tax_param = 
+CarTaxParam.query.filter_by(id=code_rate).first()
+ if not car_tax_param:
+ return jsonify({'error': 'Параметр налога на автомобиль 
+не найден'}), 400
+ existing_car_tax_param = 
+CarTaxParam.query.filter_by(city_id=region.id, 
+ 
+from_hp_car=from_hp_car, 
+to_hp_car=to_hp_car, 
+from_production_year_car=from_production_year_car, 
+to_production_year_car=to_production_year_car).first()
+ if existing_car_tax_param and existing_car_tax_param.id != 
+code_rate:
+ return jsonify({'error': 'Параметр налога на автомобиль 
+уже существует'}), 400
+ car_tax_param.city_id = region.id
+ car_tax_param.from_hp_car = from_hp_car
+ car_tax_param.to_hp_car = to_hp_car
+ car_tax_param.from_production_year_car = 
+from_production_year_car
+ car_tax_param.to_production_year_car = 
+to_production_year_car
+ car_tax_param.rate = rate
+ db.session.add(car_tax_param)
+ db.session.commit()
+ db.session.rollback()
+ return jsonify({'message': 'Параметр налога на автомобиль 
+успешно обновлен'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/car/tax-param/update'
+data = {
+ 'code_rate': 12,
+ 'region_code': 54,
+ 'from_hp_car': 300,
+ 'to_hp_car': 400,
+ 'from_production_year_car': 2002,
+ 'to_production_year_car': 2013,
+ 'rate': 0.8
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос POST /v1/car/tax-param/delete
+
+@car_route.route('/tax-param/delete', methods=['POST'])
+def delete_car_tax_param():
+ data = request.get_json()
+ code_rate = data['code_rate']
+ car_tax_param = 
+CarTaxParam.query.filter_by(id=code_rate).first()
+ if not car_tax_param:
+ return jsonify({'error': 'Параметр налога на автомобиль 
+не найден'}), 400
+ db.session.delete(car_tax_param)
+ db.session.commit()
+ db.session.rollback()
+ return jsonify({'message': 'Параметр налога на автомобиль 
+успешно удален'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/car/tax-param/delete'
+data = {
+ 'code_rate': 12
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/car/get
+
+@car_route.route('/tax-param/get', methods=['GET'])
+def get_car_tax_param():
+ data = request.get_json()
+ code_rate = data['code_rate']
+ car_tax_param = 
+CarTaxParam.query.filter_by(id=code_rate).first()
+ if not car_tax_param:
+ return jsonify({'error': 'Параметр налога на автомобиль 
+не найден'}), 400
+ return jsonify({'code_rate': car_tax_param.id,
+ 'region_code': car_tax_param.city_id,
+'from_hp_car': car_tax_param.from_hp_car,
+'to_hp_car': car_tax_param.to_hp_car,
+'from_production_year_car': 
+car_tax_param.from_production_year_car,
+ 'to_production_year_car': 
+car_tax_param.from_production_year_car,
+ 'rate': car_tax_param.rate}), 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/car/tax-param/get'
+data = {
+ 'code_rate': 20
+}
+response = requests.get(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/car/get/all
+
+@car_route.route('/tax-param/get/all', methods=['GET'])
+def get_all_car_tax_params():
+ car_tax_params = CarTaxParam.query.all()
+ car_tax_params_list = []
+ for car_tax_param in car_tax_params:
+ car_tax_params_list.append({'code_rate': 
+car_tax_param.id,
+ 'region_code': 
+car_tax_param.city_id,
+'from_hp_car': 
+car_tax_param.from_hp_car,
+'to_hp_car': 
+car_tax_param.to_hp_car,
+'from_production_year_car': 
+car_tax_param.from_production_year_car,
+'to_production_year_car': 
+car_tax_param.from_production_year_car,
+'rate': 
+car_tax_param.rate}), 200
+ return jsonify(car_tax_params_list), 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/car/tax-param/get/all'
+response = requests.get(url)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/car/tax/calc
+
+@car_route.route('/tax-param/tax/calc', methods=['GET'])
+def calculate_tax():
+ data = request.get_json()
+ horsepower = int(data['horsepower'])
+ year = int(data['year'])
+ code_rate = data['code_rate']
+ tax_object = CarTaxParam.query.filter_by(id=code_rate). \
+ filter(CarTaxParam.from_production_year_car <= year). \
+ filter(CarTaxParam.to_production_year_car >= year). \
+ filter(CarTaxParam.from_hp_car <= horsepower). \
+ filter(CarTaxParam.to_hp_car >= horsepower).first()
+ if not tax_object:
+ return {'error': 'Объект налогообложения по заданным 
+параметрам не найден'}, 400
+ tax_rate = tax_object.rate
+ tax = horsepower * tax_rate
+ return {'tax': tax}, 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/car/tax-param/tax/calc'
+data = {
+ 'code_rate': 20,
+ 'year': 2005,
+ 'horsepower': 350
+}
+response = requests.get(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Создать файл area_route.py, в котором должно быть создание Blueprint и запросы
+
+from flask import Blueprint, request, jsonify
+from region_route import Region
+from db_test import db
+area_route = Blueprint('area', __name__, url_prefix='/v1/area')
+class AreaTaxParam(db.Model):
+ id = db.Column(db.Integer, primary_key=True)
+ city_id = db.Column(db.Integer, db.ForeignKey('region.id'), 
+nullable=False)
+ rate = db.Column(db.Numeric, nullable=False)
+
+# Запрос POST /v1/area/tax-param/add
+
+@area_route.route('/tax-param/add', methods=['POST'])
+def add_tax_param():
+ data = request.get_json()
+ area_code = data['area_code']
+ region_code = data['region_code']
+ rate = data['rate']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Регион не существует'}), 400
+ area_tax_param = AreaTaxParam(id=area_code, 
+city_id=region_code, rate=rate)
+ db.session.add(area_tax_param)
+ db.session.commit()
+ return jsonify({'message': 'Налоговый параметр района 
+успешно добавлен'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/area/tax-param/add'
+data = {
+ 'area_code': 2,
+ 'region_code': 54,
+ 'rate': 0.45
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос POST /v1/area/tax-param/update
+
+@area_route.route('/tax-param/update', methods=['POST'])
+def update_tax_param():
+ data = request.get_json()
+ region_code = data['region_code']
+ rate = data['rate']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Регион не существует'}), 400
+ area_tax_param = 
+AreaTaxParam.query.filter_by(city_id=region_code).first()
+ if not area_tax_param:
+ return jsonify({'error': 'Параметр районного налога не 
+существует'}), 400
+ area_tax_param.rate = rate
+ db.session.commit()
+ return jsonify({'message': 'Налоговый параметр области 
+успешно обновлен'}), 200
+
+# Проверка (запрос POST)
+
+url = 'http://localhost:5000/v1/area/tax-param/update'
+data = {
+ 'region_code': 54,
+ 'rate': 0.1
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос POST /v1/area/tax-param/delete
+
+@area_route.route('/tax-param/delete', methods=['POST'])
+def delete_tax_param():
+ data = request.get_json()
+ region_code = data['region_code']
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Регион не существует'}), 400
+ area_tax_param = 
+AreaTaxParam.query.filter_by(city_id=region_code).first()
+ if not area_tax_param:
+ return jsonify({'error': 'Параметр районного налога не 
+существует'}), 400
+ db.session.delete(area_tax_param)
+ db.session.commit()
+ return jsonify({'message': 'Налоговый параметр области 
+успешно удален'}), 200
+
+# Проверка (запрос POST)
+url = 'http://localhost:5000/v1/area/tax-param/delete'
+data = {
+ 'region_code': 12
+}
+response = requests.post(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/area/tax-param/get
+
+@area_route.route('/tax-param/get', methods=['GET'])
+def get_area_tax_param():
+ data = request.get_json()
+ area_code = data['area_code']
+ area_tax_param = 
+AreaTaxParam.query.filter_by(id=area_code).first()
+ if not area_tax_param:
+ return jsonify({'error': 'Параметр районного налога не 
+существует'}), 400
+ return jsonify({'code_rate': area_tax_param.id,
+ 'region_code': area_tax_param.city_id,
+'from_hp_car': area_tax_param.rate}), 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/area/tax-param/get'
+data = {
+ 'area_code': 2
+}
+response = requests.get(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/area/tax-param/get/all
+
+@area_route.route('/tax-param/get/all', methods=['GET'])
+def get_all_area_tax_param():
+ area_tax_params = AreaTaxParam.query.all()
+ area_tax_params_list = []
+ for area_tax_param in area_tax_params:
+ area_tax_params_list.append({'code_rate': 
+area_tax_param.id,
+ 'region_code': 
+area_tax_param.city_id,
+'from_hp_car': 
+area_tax_param.rate}), 200
+ return jsonify(area_tax_params_list), 200
+
+# Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/area/tax-param/get/all'
+response = requests.get(url)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
+
+# Запрос GET /v1/area/tax/calc
+
+@area_route.route('/tax/calc', methods=['GET'])
+def calculate_area_tax():
+ data = request.get_json()
+ region_code = data['region_code']
+ cadastre_value = int(data['cadastre_value'])
+ region = Region.query.filter_by(id=region_code).first()
+ if not region:
+ return jsonify({'error': 'Region does not exist'}), 400
+ area_tax_param = 
+AreaTaxParam.query.filter_by(city_id=region_code).first()
+ tax_amount = cadastre_value * area_tax_param.rate
+ return jsonify({'tax_amount': tax_amount}), 200
+
+Проверка (запрос GET)
+
+url = 'http://localhost:5000/v1/area/tax/calc'
+data = {
+ 'region_code': 54,
+ 'cadastre_value': 700
+}
+response = requests.get(url, json=data)
+parsed_response = response.json()
+print(response)
+print(parsed_response)
